@@ -149,10 +149,101 @@ class AdminDashboard:
         with tab1:
             applications = AdminDashboard.get_pending_applications()
             if applications:
-                df = pd.DataFrame(applications)
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.subheader(f"📋 {len(applications)} Pending Applications")
+                
+                for app in applications:
+                    with st.expander(f"🔍 {app.get('full_name', 'Unknown')} - {app.get('application_status', 'Unknown')} | Submitted: {app.get('submission_date', 'N/A')}"):
+                        col1, col2 = st.columns([2, 1])
+                        with col1:
+                            st.write(f"**Application ID:** `{app.get('application_id')}`")
+                            st.write(f"**Customer ID:** `{app.get('customer_id')}`")
+                            st.write(f"**Email:** {app.get('email', 'N/A')}")
+                            st.write(f"**Phone:** {app.get('phone_number', 'N/A')}")
+                            st.write(f"**Documents:** {app.get('document_count', 0)} total, {app.get('verified_count', 0)} verified")
+                            st.write(f"**Status:** {app.get('application_status', 'Unknown')}")
+                        
+                        with col2:
+                            st.markdown("### Actions")
+                            
+                            # Get application details
+                            app_id = app.get('application_id')
+                            
+                            col_approve, col_reject = st.columns(2)
+                            with col_approve:
+                                if st.button("✅ Approve", key=f"approve_{app_id}", type="primary", use_container_width=True):
+                                    if AdminDashboard.update_application_status(
+                                        str(app_id), 'approved',
+                                        st.session_state.user.get('user_id', 'admin'),
+                                        "Approved by admin via dashboard"
+                                    ):
+                                        st.success("✅ Application approved!")
+                                        st.rerun()
+                            
+                            with col_reject:
+                                if st.button("❌ Reject", key=f"reject_{app_id}", use_container_width=True):
+                                    if AdminDashboard.update_application_status(
+                                        str(app_id), 'rejected',
+                                        st.session_state.user.get('user_id', 'admin'),
+                                        "Rejected by admin via dashboard"
+                                    ):
+                                        st.error("❌ Application rejected!")
+                                        st.rerun()
+                            
+                            # View details button
+                            if st.button("📄 View Details", key=f"view_{app_id}", use_container_width=True):
+                                st.session_state['selected_app_id'] = str(app_id)
+                                st.rerun()
+                
+                # Show selected application details
+                if 'selected_app_id' in st.session_state:
+                    st.markdown("---")
+                    st.subheader("📄 Application Details")
+                    selected_id = st.session_state['selected_app_id']
+                    
+                    # Get full application details
+                    detail_query = """
+                        SELECT ka.*, c.*, u.email, u.username
+                        FROM kyc_applications ka
+                        LEFT JOIN customers c ON ka.customer_id = c.customer_id
+                        LEFT JOIN users u ON c.user_id = u.user_id
+                        WHERE ka.application_id = %s
+                    """
+                    app_details = db.execute_one(detail_query, (selected_id,))
+                    
+                    if app_details:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown("### Customer Information")
+                            st.write(f"**Name:** {app_details.get('full_name', 'N/A')}")
+                            st.write(f"**Email:** {app_details.get('email', 'N/A')}")
+                            st.write(f"**Phone:** {app_details.get('phone_number', 'N/A')}")
+                            st.write(f"**PAN:** {app_details.get('pan_card', 'N/A')}")
+                            st.write(f"**Aadhar:** {app_details.get('aadhar_no', 'N/A')}")
+                            st.write(f"**Address:** {app_details.get('address', 'N/A')}")
+                        
+                        with col2:
+                            st.markdown("### Application Information")
+                            st.write(f"**Status:** {app_details.get('application_status', 'N/A')}")
+                            st.write(f"**Submitted:** {app_details.get('submission_date', 'N/A')}")
+                            st.write(f"**Notes:** {app_details.get('notes', 'No notes')}")
+                        
+                        # Get documents
+                        doc_query = """
+                            SELECT document_type, document_name, verification_status, file_path
+                            FROM documents
+                            WHERE application_id = %s
+                        """
+                        documents = db.execute_query(doc_query, (selected_id,))
+                        if documents:
+                            st.markdown("### Documents")
+                            for doc in documents:
+                                st.write(f"- **{doc.get('document_type')}**: {doc.get('document_name')} - {doc.get('verification_status')}")
+                        
+                        if st.button("❌ Close Details"):
+                            del st.session_state['selected_app_id']
+                            st.rerun()
             else:
-                st.info("No pending applications")
+                st.info("✅ No pending applications")
         
         with tab2:
             alerts = AdminDashboard.get_fraud_alerts()

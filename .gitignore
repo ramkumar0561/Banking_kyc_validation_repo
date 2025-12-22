@@ -1,5 +1,89 @@
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
 .venv/
+venv/1
+ENV/
+env/
+
+# Environment Variables
 .env
-submitted_data/
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Streamlit
+.streamlit/
+
+# Database
 *.db
+*.sqlite
+*.sqlite3
+
+# User Uploaded Data
+submitted_data/
+uploads/
+
+# Test Data & Samples
+PROJECT_TEST_DATA/
+test_cards/
+testing_data/
+Testing_Project_Files/
+templates/
+
+# Legacy Files (to be archived)
+main.py
+Sample.py
+migrate_*.py
+migrate_*.sql
+verify_syntax.py
+generate_test_data.py
+
+# Documentation (Historical - keep only active docs)
+# Keep: README.md, ARCHITECTURE.md, SETUP.md, USER_MANUAL.md, ADMIN_GUIDE.md, PROJECT_AUDIT.md
+FIXES_APPLIED.md
+ADVANCED_FEATURES_SUMMARY.md
+KYC_VALIDATION_FIXES.md
+WEBCAM_AND_VALIDATION_FIXES.md
+STATUS_CHECK_FIX.md
+ALL_FIXES_SUMMARY.md
+COMPLETE_MIGRATION_GUIDE.md
+MIGRATION_INSTRUCTIONS.md
+PROJECT_RETRIEVED.md
+PROJECT_SUMMARY.md
+QUICK_START.md
+SYNTAX_VERIFIED.md
+KYC_VALIDATION_GUIDE.md
+ACTIVE_FILES_LIST.md
+SETUP_GUIDE.md
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Screenshots and Images
+*.png
+*.jpg
+*.jpeg
+Screenshot*.png
+
+# Excel files (test data)
+*.xlsx
+!PROJECT_TEST_DATA/test_data_registry.xlsx

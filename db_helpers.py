@@ -186,12 +186,17 @@ def get_customer_kyc_status(customer_id: uuid.UUID) -> Optional[Dict[str, Any]]:
     """Get KYC application status for a customer"""
     try:
         query = """
-            SELECT ka.*, 
+            SELECT ka.application_id, ka.customer_id, ka.application_status, 
+                   ka.submission_date, ka.verification_date, ka.verified_by,
+                   ka.rejection_reason, ka.notes, ka.created_at, ka.updated_at,
                    COUNT(DISTINCT d.document_id) as total_documents,
                    COUNT(DISTINCT CASE WHEN d.verification_status = 'verified' THEN d.document_id END) as verified_documents
             FROM kyc_applications ka
             LEFT JOIN documents d ON ka.application_id = d.application_id
             WHERE ka.customer_id = %s
+            GROUP BY ka.application_id, ka.customer_id, ka.application_status, 
+                     ka.submission_date, ka.verification_date, ka.verified_by,
+                     ka.rejection_reason, ka.notes, ka.created_at, ka.updated_at
             ORDER BY ka.submission_date DESC
             LIMIT 1
         """
@@ -274,7 +279,7 @@ def check_application_status(identifier: str, identifier_type: str = 'email') ->
             FROM information_schema.columns 
             WHERE table_name = 'customers'
         """
-        existing_cols = db.execute_all(check_cols_query)
+        existing_cols = db.execute_query(check_cols_query, fetch=True)
         col_names = {row['column_name'] for row in existing_cols} if existing_cols else set()
         
         # Build column list dynamically based on what exists
