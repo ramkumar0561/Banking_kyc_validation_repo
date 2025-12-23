@@ -20,7 +20,7 @@ class DatabaseConfig:
             'port': os.getenv('DB_PORT', '5432'),
             'database': os.getenv('DB_NAME', 'horizon_bank_kyc'),
             'user': os.getenv('DB_USER', 'postgres'),
-            'password': os.getenv('DB_PASSWORD', 'test')
+            'password': os.getenv('DB_PASSWORD', 'postgres')
         }
         self.connection_pool: Optional[pool.ThreadedConnectionPool] = None
     
