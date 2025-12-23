@@ -627,11 +627,13 @@ elif st.session_state.view == "Register":
                     email = st.text_input("Email Address*", placeholder="example@email.com")
                     
                     # Phone number with country code
-                    phone_col1, phone_col2 = st.columns([1, 3])
-                    with phone_col1:
-                        country_code = st.selectbox("Country Code*", ["+91", "+1", "+44", "+61", "+971", "+86", "+65"], index=0, help="Select your country code")
-                    with phone_col2:
-                        phone = st.text_input("Phone Number*", placeholder="9876543210", max_chars=10, help="Enter 10-digit phone number")
+                    country_code = st.selectbox("Country Code*", ["+91", "+1", "+44", "+61", "+971", "+86", "+65"], index=0)
+                    phone = st.text_input("Phone Number*", placeholder="9876543210", max_chars=10)
+                    # phone_col1, phone_col2 = st.columns([1, 3])
+                    # with phone_col1:
+                    #     country_code = st.selectbox("Country Code*", ["+91", "+1", "+44", "+61", "+971", "+86", "+65"], index=0, help="Select your country code")
+                    # with phone_col2:
+                    #     phone = st.text_input("Phone Number*", placeholder="9876543210", max_chars=10, help="Enter 10-digit phone number")
                 with col2:
                     dob = st.date_input("Date of Birth*", min_value=date(1920, 1, 1), max_value=date.today())
                     gender = st.selectbox("Gender*", ["", "Male", "Female", "Other", "Prefer not to say"])
@@ -2336,7 +2338,7 @@ elif st.session_state.view == "CustomerManagement":
                             
                             # Show validation details dropdown
                             if app_notes and ('AUTO-VALIDATION RESULTS' in app_notes or 'ADVANCED AI-VALIDATION RESULTS' in app_notes):
-                                with st.expander("📋 View Full Validation Details & Scores"):
+                                with st.popover("📋 View Full Validation Details & Scores"):
                                     st.code(app_notes)
                                     
                                     # Show AI features breakdown if available
