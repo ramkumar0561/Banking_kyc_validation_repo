@@ -431,3 +431,4 @@ sequenceDiagram
 4. **API Endpoints**: RESTful API for mobile app integration
 5. **Multi-language Support**: OCR for regional languages
 
+

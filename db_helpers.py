@@ -18,9 +18,68 @@ def verify_password(password: str, password_hash: str) -> bool:
     """Verify password against hash"""
     return hash_password(password) == password_hash
 
+def check_username_exists(username: str) -> bool:
+    """Check if username already exists"""
+    try:
+        query = "SELECT user_id FROM users WHERE username = %s"
+        result = db.execute_one(query, (username,))
+        return result is not None
+    except:
+        return False
+
+def check_email_exists(email: str) -> bool:
+    """Check if email already exists"""
+    try:
+        query = "SELECT user_id FROM users WHERE email = %s"
+        result = db.execute_one(query, (email,))
+        return result is not None
+    except:
+        return False
+
+def check_phone_exists(phone: str) -> bool:
+    """Check if phone number already exists"""
+    try:
+        query = "SELECT customer_id FROM customers WHERE phone_number = %s"
+        result = db.execute_one(query, (phone,))
+        return result is not None
+    except:
+        return False
+
+def check_pan_exists(pan: str) -> bool:
+    """Check if PAN card already exists"""
+    try:
+        if not pan or pan.strip() == "":
+            return False
+        query = "SELECT customer_id FROM customers WHERE pan_card = %s AND pan_card IS NOT NULL AND pan_card != ''"
+        result = db.execute_one(query, (pan.strip(),))
+        return result is not None
+    except:
+        return False
+
+def check_aadhar_exists(aadhar: str) -> bool:
+    """Check if Aadhar number already exists"""
+    try:
+        if not aadhar or aadhar.strip() == "":
+            return False
+        query = "SELECT customer_id FROM customers WHERE aadhar_no = %s AND aadhar_no IS NOT NULL AND aadhar_no != ''"
+        result = db.execute_one(query, (aadhar.strip(),))
+        return result is not None
+    except:
+        return False
+
 def create_user(username: str, email: str, password: str, role: str = 'customer') -> Optional[uuid.UUID]:
     """Create a new user"""
     try:
+        # Check if username already exists
+        if check_username_exists(username):
+            st.error(f"❌ Username '{username}' already exists. Please choose a different username.")
+            return None
+        
+        # Check if email already exists
+        if check_email_exists(email):
+            st.error(f"❌ Email '{email}' is already registered. Please use a different email or login.")
+            return None
+        
         password_hash = hash_password(password)
         query = """
             INSERT INTO users (username, email, password_hash, role)
@@ -35,7 +94,15 @@ def create_user(username: str, email: str, password: str, role: str = 'customer'
             return result['user_id']
         return None
     except Exception as e:
-        st.error(f"Error creating user: {str(e)}")
+        # Check if error is due to unique constraint
+        error_msg = str(e).lower()
+        if 'unique' in error_msg or 'duplicate' in error_msg:
+            if 'username' in error_msg:
+                st.error(f"❌ Username '{username}' already exists. Please choose a different username.")
+            elif 'email' in error_msg:
+                st.error(f"❌ Email '{email}' is already registered. Please use a different email.")
+        else:
+            st.error(f"Error creating user: {str(e)}")
         return None
 
 def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
@@ -131,6 +198,154 @@ def update_customer_kyc(customer_id: uuid.UUID, kyc_data: Dict[str, Any]) -> boo
         st.error(f"Error updating customer KYC: {str(e)}")
         return False
 
+def admin_approve_kyc(application_id: uuid.UUID, customer_id: uuid.UUID, admin_user_id: Optional[uuid.UUID], admin_notes: str = "") -> bool:
+    """Admin manually approves KYC application"""
+    try:
+        # Update KYC application status
+        if admin_user_id:
+            update_query = """
+                UPDATE kyc_applications 
+                SET application_status = 'approved',
+                    verification_date = CURRENT_TIMESTAMP,
+                    verified_by = %s,
+                    notes = %s
+                WHERE application_id = %s
+            """
+            notes = f"Manually approved by admin. {admin_notes}".strip()
+            db.execute_query(update_query, (admin_user_id, notes, application_id), fetch=False)
+        else:
+            # If no admin_user_id, don't set verified_by
+            update_query = """
+                UPDATE kyc_applications 
+                SET application_status = 'approved',
+                    verification_date = CURRENT_TIMESTAMP,
+                    notes = %s
+                WHERE application_id = %s
+            """
+            notes = f"Manually approved by admin. {admin_notes}".strip()
+            db.execute_query(update_query, (notes, application_id), fetch=False)
+        
+        # Update customer KYC status
+        customer_update = "UPDATE customers SET kyc_status = 'Approved' WHERE customer_id = %s"
+        db.execute_query(customer_update, (customer_id,), fetch=False)
+        
+        # Update all documents to verified
+        doc_update = """
+            UPDATE documents 
+            SET verification_status = 'verified',
+                verified_at = CURRENT_TIMESTAMP,
+                verification_notes = 'Approved by admin'
+            WHERE application_id = %s
+        """
+        db.execute_query(doc_update, (application_id,), fetch=False)
+        
+        # Log audit (admin_user_id can be None)
+        log_audit(admin_user_id, 'kyc_approve', 'application', application_id, 
+                 f"Admin approved KYC for customer {customer_id}")
+        return True
+    except Exception as e:
+        st.error(f"Error approving KYC: {str(e)}")
+        return False
+
+def admin_reject_kyc(application_id: uuid.UUID, customer_id: uuid.UUID, admin_user_id: Optional[uuid.UUID], rejection_reason: str) -> bool:
+    """Admin manually rejects KYC application"""
+    try:
+        # Update KYC application status
+        if admin_user_id:
+            update_query = """
+                UPDATE kyc_applications 
+                SET application_status = 'rejected',
+                    verification_date = CURRENT_TIMESTAMP,
+                    verified_by = %s,
+                    rejection_reason = %s,
+                    notes = %s
+                WHERE application_id = %s
+            """
+            notes = f"Manually rejected by admin. Reason: {rejection_reason}"
+            db.execute_query(update_query, (admin_user_id, rejection_reason, notes, application_id), fetch=False)
+        else:
+            # If no admin_user_id, don't set verified_by
+            update_query = """
+                UPDATE kyc_applications 
+                SET application_status = 'rejected',
+                    verification_date = CURRENT_TIMESTAMP,
+                    rejection_reason = %s,
+                    notes = %s
+                WHERE application_id = %s
+            """
+            notes = f"Manually rejected by admin. Reason: {rejection_reason}"
+            db.execute_query(update_query, (rejection_reason, notes, application_id), fetch=False)
+        
+        # Update customer KYC status
+        customer_update = "UPDATE customers SET kyc_status = 'Rejected' WHERE customer_id = %s"
+        db.execute_query(customer_update, (customer_id,), fetch=False)
+        
+        # Log audit
+        log_audit(admin_user_id, 'kyc_rejection', 'kyc_application', application_id, 
+                 f"KYC rejected by admin. Reason: {rejection_reason}")
+        
+        return True
+    except Exception as e:
+        st.error(f"Error rejecting KYC: {str(e)}")
+        return False
+
+def admin_reject_document(document_id: uuid.UUID, application_id: uuid.UUID, customer_id: uuid.UUID, 
+                         admin_user_id: Optional[uuid.UUID], rejection_reason: str, document_type: str) -> bool:
+    """Admin manually rejects a specific document (photo or identity_proof)"""
+    try:
+        # Update document verification status to rejected
+        doc_update_query = """
+            UPDATE documents 
+            SET verification_status = 'rejected',
+                verification_notes = %s,
+                verified_at = CURRENT_TIMESTAMP
+            WHERE document_id = %s
+        """
+        notes = f"Manually rejected by admin. Reason: {rejection_reason}. Document Type: {document_type}"
+        db.execute_query(doc_update_query, (notes, document_id), fetch=False)
+        
+        # Update KYC application to indicate partial rejection
+        app_update_query = """
+            UPDATE kyc_applications 
+            SET application_status = 'pending_resubmission',
+                notes = COALESCE(notes || E'\\n', '') || %s
+            WHERE application_id = %s
+        """
+        rejection_note = f"Document rejected: {document_type}. Reason: {rejection_reason}. Customer needs to resubmit this document."
+        db.execute_query(app_update_query, (rejection_note, application_id), fetch=False)
+        
+        # Update customer KYC status to indicate resubmission needed
+        customer_update = "UPDATE customers SET kyc_status = 'Pending Resubmission' WHERE customer_id = %s"
+        db.execute_query(customer_update, (customer_id,), fetch=False)
+        
+        # Log audit
+        log_audit(admin_user_id, 'document_rejection', 'document', document_id, 
+                 f"Document {document_type} rejected by admin. Reason: {rejection_reason}")
+        
+        return True
+    except Exception as e:
+        st.error(f"Error rejecting document: {str(e)}")
+        return False
+        
+        # Update all documents to rejected
+        doc_update = """
+            UPDATE documents 
+            SET verification_status = 'rejected',
+                verified_at = CURRENT_TIMESTAMP,
+                verification_notes = %s
+            WHERE application_id = %s
+        """
+        rejection_note = f"Rejected by admin: {rejection_reason}"
+        db.execute_query(doc_update, (rejection_note, application_id), fetch=False)
+        
+        # Log audit (admin_user_id can be None)
+        log_audit(admin_user_id, 'kyc_reject', 'application', application_id, 
+                 f"Admin rejected KYC for customer {customer_id}. Reason: {rejection_reason}")
+        return True
+    except Exception as e:
+        st.error(f"Error rejecting KYC: {str(e)}")
+        return False
+
 def create_kyc_application(customer_id: uuid.UUID) -> Optional[uuid.UUID]:
     """Create a new KYC application"""
     try:
@@ -208,6 +423,8 @@ def get_customer_kyc_status(customer_id: uuid.UUID) -> Optional[Dict[str, Any]]:
 def get_customer_documents(application_id: uuid.UUID) -> List[Dict[str, Any]]:
     """Get all documents for an application"""
     try:
+        # Convert UUID to string for database query
+        app_id_str = str(application_id) if isinstance(application_id, uuid.UUID) else application_id
         query = """
             SELECT document_id, document_type, document_name, file_path, 
                    verification_status, verification_notes, created_at
@@ -215,7 +432,7 @@ def get_customer_documents(application_id: uuid.UUID) -> List[Dict[str, Any]]:
             WHERE application_id = %s
             ORDER BY created_at DESC
         """
-        return db.execute_query(query, (application_id,))
+        return db.execute_query(query, (app_id_str,))
     except Exception as e:
         st.error(f"Error fetching documents: {str(e)}")
         return []
@@ -314,22 +531,36 @@ def check_application_status(identifier: str, identifier_type: str = 'email') ->
         if identifier_type == 'email':
             query = f"""
                 SELECT {select_list},
-                       u.email, u.username, ka.application_id, ka.application_status
+                       u.email, u.username, ka.application_id, ka.application_status,
+                       ka.submission_date, ka.notes, ka.rejection_reason,
+                       COALESCE(COUNT(DISTINCT d.document_id), 0) as total_documents,
+                       COALESCE(COUNT(DISTINCT CASE WHEN d.verification_status = 'verified' THEN d.document_id END), 0) as verified_documents,
+                       COALESCE(COUNT(DISTINCT CASE WHEN d.verification_status = 'rejected' THEN d.document_id END), 0) as rejected_documents,
+                       COALESCE(COUNT(DISTINCT CASE WHEN d.verification_status = 'pending' OR d.verification_status IS NULL THEN d.document_id END), 0) as pending_documents
                 FROM customers c
                 LEFT JOIN users u ON c.user_id = u.user_id
                 LEFT JOIN kyc_applications ka ON c.customer_id = ka.customer_id
+                LEFT JOIN documents d ON ka.application_id = d.application_id
                 WHERE u.email = %s
+                GROUP BY {select_list}, u.email, u.username, ka.application_id, ka.application_status, ka.submission_date, ka.notes, ka.rejection_reason
                 ORDER BY ka.submission_date DESC NULLS LAST
                 LIMIT 1
             """
         else:  # phone
             query = f"""
                 SELECT {select_list},
-                       u.email, u.username, ka.application_id, ka.application_status
+                       u.email, u.username, ka.application_id, ka.application_status,
+                       ka.submission_date, ka.notes, ka.rejection_reason,
+                       COALESCE(COUNT(DISTINCT d.document_id), 0) as total_documents,
+                       COALESCE(COUNT(DISTINCT CASE WHEN d.verification_status = 'verified' THEN d.document_id END), 0) as verified_documents,
+                       COALESCE(COUNT(DISTINCT CASE WHEN d.verification_status = 'rejected' THEN d.document_id END), 0) as rejected_documents,
+                       COALESCE(COUNT(DISTINCT CASE WHEN d.verification_status = 'pending' OR d.verification_status IS NULL THEN d.document_id END), 0) as pending_documents
                 FROM customers c
                 LEFT JOIN users u ON c.user_id = u.user_id
                 LEFT JOIN kyc_applications ka ON c.customer_id = ka.customer_id
+                LEFT JOIN documents d ON ka.application_id = d.application_id
                 WHERE c.phone_number = %s
+                GROUP BY {select_list}, u.email, u.username, ka.application_id, ka.application_status, ka.submission_date, ka.notes, ka.rejection_reason
                 ORDER BY ka.submission_date DESC NULLS LAST
                 LIMIT 1
             """
